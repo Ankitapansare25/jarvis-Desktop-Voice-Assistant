@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+
+    environment {
+        SSH_CRED    = 'node-app-key'
+        SERVER_IP   = '13.201.166.66'
+        REMOTE_USER = 'ubuntu'
+        APP_DIR     = '/home/ubuntu/jarvis'
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git url: 'https://github.com/Ankitapansare25/jarvis-Desktop-Voice-Assistant.git', branch: 'main'
+            }
+        }
+
+        stage('Deploy to Server') {
+            steps {
+                sshagent(credentials: ["${SSH_CRED}"]) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${SERVER_IP} 'mkdir -p ${APP_DIR}'
+                        scp -o StrictHostKeyChecking=no -r * ${REMOTE_USER}@${SERVER_IP}:${APP_DIR}
+                    """
+                }
+            }
+        }
+
+        stage('Install Dependencies & Run App') {
+            steps {
+                sshagent(credentials: ["${SSH_CRED}"]) {
+                    sh '''
+ssh -o StrictHostKeyChecking=no ubuntu@3.108.219.106 << EOF
+cd /home/ubuntu/jarvisweb
+sudo apt update
+sudo apt install -y python3-venv python3-pip
+
+python3 -m venv venv
+. venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+pkill -f app.py || true
+nohup python3 app.py > app.log 2>&1 &
+EOF
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment Successful"
+        }
+        failure {
+            echo "❌ Deployment Failed"
+        }
+    }
+}
